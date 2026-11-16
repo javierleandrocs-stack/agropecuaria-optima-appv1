@@ -1,0 +1,7 @@
+﻿streamlit
+pillow
+fpdf2
+openpyxl
+requests
+beautifulsoup4
+urllib3

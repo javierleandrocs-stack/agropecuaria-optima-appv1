@@ -1,0 +1,10 @@
+﻿.venv/
+__pycache__/
+build/
+dist/
+Instalador_Sistema_Integral_Finca/
+*.spec
+*.exe
+*.zip
+*.db-wal
+*.db-shm
