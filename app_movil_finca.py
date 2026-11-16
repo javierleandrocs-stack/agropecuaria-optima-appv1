@@ -35,7 +35,23 @@ SEDE_PLANTA_PRINCIPAL = "PLANTA / FINCA PRINCIPAL"
 OPCION_CHOFER_MANUAL = "-- Escribir Manualmente --"
 
 # PIN alfanumérico personalizado para entrar desde iPhone, Android o Laptop
-PIN_ACCESO_MOVIL = "a1b2c3"
+# ==============================================================================
+# LECTURA SEGURA DEL PIN (OCULTO EN LA BÓVEDA DE STREAMLIT SI EL REPO ES PÚBLICO)
+# ==============================================================================
+def obtener_pin_seguro() -> str:
+    """
+    Lee el PIN desde la bóveda privada 'Secrets' de Streamlit Cloud para que
+    no quede visible en GitHub si el repositorio es público. En tu PC usa 'a1b2c3'.
+    """
+    try:
+        if "PIN_ACCESO" in st.secrets:
+            return str(st.secrets["PIN_ACCESO"]).strip()
+    except Exception:
+        pass
+    "CLAVE_PROTEGIDA_EN_SERVIDOR"
+
+
+PIN_ACCESO_MOVIL = obtener_pin_seguro()
 
 UMBRAL_STOCK_BAJO_KG = 20.0
 ALTO_MAX_LOGO_PDF_MM = 24.0
