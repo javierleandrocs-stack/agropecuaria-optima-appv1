@@ -1,11 +1,16 @@
 """
 ================================================================================
-APLICACIÓN MÓVIL Y COMPARTIDA EN LA NUBE (IOS, ANDROID Y LAPTOP)
+SISTEMA INTEGRAL FINCA COMPLETO (VERSIÓN WEB Y MÓVIL PARA IPHONE, ANDROID Y PC)
 Empresa: AGROPECUARIA OPTIMA C.A
 Archivo: app_movil_finca.py
-PIN de Acceso Configurado: a1b2c3
-Módulos completos (1 al 7): Listas con Checklist, Despachos, Notas de Crédito,
-Débitos/Rotación con Choferes, Inventario por Sede, Bases de Datos e Historial.
+Contiene los 7 Módulos Completos en Pestañas Visibles (Sin textos None):
+ 1. Listas de Precios (Checklist ☑/☐, Ajuste Masivo % y Editor de Catálogo).
+ 2. Órdenes de Despacho (Clientes, Kilos x Precio Unitario, Descuento de Stock).
+ 3. Notas de Crédito (Centros de Distribución y Afectación de Saldos).
+ 4. Notas de Débito y Movimientos (Preselector de Choferes y Rotación en Vivo).
+ 5. Inventario por Sede (Existencias en KG, Carga Manual, Alertas y PDF/Excel).
+ 6. Bases de Datos Maestras (Clientes, Centros de Distribución y Choferes).
+ 7. Historial General de Documentos (Reimpresión PDF/Excel y Reversión de Stock).
 ================================================================================
 """
 
@@ -28,30 +33,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # ==============================================================================
-# PARÁMETROS AJUSTABLES POR EL USUARIO
+# PARÁMETROS AJUSTABLES DEL SISTEMA
 # ==============================================================================
 NOMBRE_EMPRESA = "AGROPECUARIA OPTIMA C.A"
 SEDE_PLANTA_PRINCIPAL = "PLANTA / FINCA PRINCIPAL"
 OPCION_CHOFER_MANUAL = "-- Escribir Manualmente --"
-
-# PIN alfanumérico personalizado para entrar desde iPhone, Android o Laptop
-# ==============================================================================
-# LECTURA SEGURA DEL PIN (OCULTO EN LA BÓVEDA DE STREAMLIT SI EL REPO ES PÚBLICO)
-# ==============================================================================
-def obtener_pin_seguro() -> str:
-    """
-    Lee el PIN desde la bóveda privada 'Secrets' de Streamlit Cloud para que
-    no quede visible en GitHub si el repositorio es público. En tu PC usa 'a1b2c3'.
-    """
-    try:
-        if "PIN_ACCESO" in st.secrets:
-            return str(st.secrets["PIN_ACCESO"]).strip()
-    except Exception:
-        pass
-    "CLAVE_PROTEGIDA_EN_SERVIDOR"
-
-
-PIN_ACCESO_MOVIL = obtener_pin_seguro()
 
 UMBRAL_STOCK_BAJO_KG = 20.0
 ALTO_MAX_LOGO_PDF_MM = 24.0
@@ -85,8 +71,13 @@ ESCALAS_PRECIO = {
 }
 
 DIAS_SEMANA_ES = {
-    0: "Lunes", 1: "Martes", 2: "Miércoles",
-    3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo",
+    0: "Lunes",
+    1: "Martes",
+    2: "Miércoles",
+    3: "Jueves",
+    4: "Viernes",
+    5: "Sábado",
+    6: "Domingo",
 }
 
 RUTA_BASE: Path = Path(__file__).resolve().parent
@@ -94,8 +85,24 @@ RUTA_DB: Path = RUTA_BASE / "sistema_finca_optima.db"
 RUTA_LOGO: Path = RUTA_BASE / "logo_finca.png"
 
 
+def obtener_pin_seguro() -> str:
+    """
+    Lee el PIN desde la bóveda privada 'Secrets' de Streamlit Cloud.
+    Si no está configurado en Secrets, acepta 'a1b2c3' por defecto.
+    """
+    try:
+        if "PIN_ACCESO" in st.secrets:
+            return str(st.secrets["PIN_ACCESO"]).strip()
+    except Exception:
+        pass
+    return "a1b2c3"
+
+
+PIN_ACCESO_MOVIL = obtener_pin_seguro()
+
+
 # ==============================================================================
-# PASO 1: BASE DE DATOS COMPARTIDA Y RECURSOS GRÁFICOS
+# PASO 1: INICIALIZACIÓN DE BASE DE DATOS Y LOGOTIPO
 # ==============================================================================
 def asegurar_logo() -> None:
     if RUTA_LOGO.exists():
@@ -116,7 +123,6 @@ def obtener_marca_tiempo() -> Tuple[str, str, str]:
 
 
 def conectar_db() -> sqlite3.Connection:
-    """Conexión multi-hilo para permitir uso simultáneo entre teléfonos y laptop."""
     conn = sqlite3.connect(RUTA_DB, timeout=20, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON;")
@@ -260,7 +266,7 @@ def inicializar_base_de_datos() -> None:
 
 
 # ==============================================================================
-# PASO 2: LÓGICA DE TASAS BCV, STOCK Y CORRELATIVOS
+# PASO 2: LÓGICA DE TASAS BCV, STOCK POR SEDE Y CORRELATIVOS
 # ==============================================================================
 def obtener_tasas_db() -> Dict[str, float]:
     filas = consultar_sql("SELECT bcv_usd, bcv_eur FROM tasas_cambio ORDER BY id DESC LIMIT 1")
@@ -310,7 +316,9 @@ def sincronizar_tasas_bcv_web() -> Tuple[bool, float, float]:
 
 def normalizar_nombre_sede(nombre_sede: str) -> str:
     limpio = str(nombre_sede).strip()
-    return SEDE_PLANTA_PRINCIPAL if limpio.startswith(SEDE_PLANTA_PRINCIPAL) else limpio
+    if limpio.startswith(SEDE_PLANTA_PRINCIPAL):
+        return SEDE_PLANTA_PRINCIPAL
+    return limpio
 
 
 def ajustar_stock_sede(conn: sqlite3.Connection, sede: str, producto: str, delta_kilos: float) -> None:
@@ -353,7 +361,7 @@ def generar_siguiente_correlativo(tipo_doc: str) -> str:
 
 
 # ==============================================================================
-# PASO 3: GENERADORES DE PDF Y EXCEL EN MEMORIA (DESCARGA EN IPHONE / ANDROID)
+# PASO 3: GENERADORES DE PDF Y EXCEL EN MEMORIA (SIN IMPRIMIR 'NONE')
 # ==============================================================================
 def limpiar_pdf(texto: str) -> str:
     return str(texto).replace("€", "EUR").encode("latin-1", "replace").decode("latin-1")
@@ -405,7 +413,11 @@ def obtener_columnas_lista_precios(modalidad_lista: str) -> List[Tuple[str, str]
         return [("CLIENTE FINAL", "precio_cliente")]
     if "Vendedor 10% + Cliente" in modalidad_lista:
         return [("VENDEDOR (10%)", "precio_vendedor"), ("CLIENTE FINAL", "precio_cliente")]
-    return [("AL MAYOR (+50KG)", "precio_mayor"), ("VENDEDOR (10%)", "precio_vendedor"), ("CLIENTE FINAL", "precio_cliente")]
+    return [
+        ("AL MAYOR (+50KG)", "precio_mayor"),
+        ("VENDEDOR (10%)", "precio_vendedor"),
+        ("CLIENTE FINAL", "precio_cliente"),
+    ]
 
 
 def generar_bytes_lista_precios(
@@ -413,11 +425,15 @@ def generar_bytes_lista_precios(
     modo_moneda: str, tasa_usd: float, tasa_eur: float, solo_disponibles: bool
 ) -> bytes:
     if rubro_filtro == "Todos los Rubros":
-        q = "SELECT * FROM productos WHERE disponible=1 ORDER BY rubro, nombre" if solo_disponibles else "SELECT * FROM productos ORDER BY rubro, nombre"
-        productos = consultar_sql(q)
+        if solo_disponibles:
+            productos = consultar_sql("SELECT * FROM productos WHERE disponible=1 ORDER BY rubro, nombre")
+        else:
+            productos = consultar_sql("SELECT * FROM productos ORDER BY rubro, nombre")
     else:
-        q = "SELECT * FROM productos WHERE rubro=? AND disponible=1 ORDER BY nombre" if solo_disponibles else "SELECT * FROM productos WHERE rubro=? ORDER BY nombre"
-        productos = consultar_sql(q, (rubro_filtro,))
+        if solo_disponibles:
+            productos = consultar_sql("SELECT * FROM productos WHERE rubro=? AND disponible=1 ORDER BY nombre", (rubro_filtro,))
+        else:
+            productos = consultar_sql("SELECT * FROM productos WHERE rubro=? ORDER BY nombre", (rubro_filtro,))
 
     dia_s, fecha_s, hora_s = obtener_marca_tiempo()
     tasa_apl, simb, nom_tasa = obtener_tasa_activa(modo_moneda, tasa_usd, tasa_eur)
@@ -452,7 +468,12 @@ def generar_bytes_lista_precios(
     colocar_encabezado_pdf(pdf, "LISTA OFICIAL DE PRECIOS DISPONIBLES", cintillo)
 
     n_cols = len(cols_precio)
-    ancho_p = 36 if n_cols == 3 else (46 if n_cols == 2 else 60)
+    if n_cols == 3:
+        ancho_p = 36
+    elif n_cols == 2:
+        ancho_p = 46
+    else:
+        ancho_p = 60
     ancho_r = 38
     ancho_nom = 190 - ancho_r - (ancho_p * n_cols)
 
@@ -465,7 +486,10 @@ def generar_bytes_lista_precios(
         pdf.cell(ancho_p, 8, limpiar_pdf(t_col), border=1, align="R", fill=True, ln=(i == n_cols - 1))
 
     for idx, p in enumerate(productos):
-        pdf.set_fill_color(246, 244, 238) if idx % 2 == 1 else pdf.set_fill_color(255, 255, 255)
+        if idx % 2 == 1:
+            pdf.set_fill_color(246, 244, 238)
+        else:
+            pdf.set_fill_color(255, 255, 255)
         pdf.set_text_color(20, 20, 20)
         pdf.set_font("Helvetica", "B", 8.2)
         pdf.cell(ancho_nom, 7, limpiar_pdf(f"  {p['nombre']}")[:42], border=1, fill=True)
@@ -648,7 +672,10 @@ def guardar_operacion_db(
     dia_sem, fecha_str, hora_str = obtener_marca_tiempo()
 
     origen_norm = normalizar_nombre_sede(origen)
-    destino_norm = normalizar_nombre_sede(destino) if tipo_doc != "DESPACHO" else destino.strip()
+    if tipo_doc != "DESPACHO":
+        destino_norm = normalizar_nombre_sede(destino)
+    else:
+        destino_norm = destino.strip()
 
     columnas = (
         "correlativo", "tipo_doc", "subtipo", "entidad_origen", "entidad_destino",
@@ -687,579 +714,653 @@ def guardar_operacion_db(
 
 
 # ==============================================================================
-# PASO 4: CONFIGURACIÓN PWA MÓVIL (IOS SAFARI + ANDROID CHROME + LAPTOP)
+# PASO 4: INTERFAZ COMPLETA DE LOS 7 MÓDULOS EN PESTAÑAS SUPERIORES
 # ==============================================================================
-asegurar_logo()
-inicializar_base_de_datos()
+def ejecutar_interfaz_principal() -> None:
+    asegurar_logo()
+    inicializar_base_de_datos()
 
-st.set_page_config(
-    page_title="Agropecuaria Óptima",
-    page_icon=str(RUTA_LOGO) if RUTA_LOGO.exists() else "🚜",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+    icono_pag = str(RUTA_LOGO) if RUTA_LOGO.exists() else "🚜"
+    st.set_page_config(
+        page_title="Agropecuaria Óptima | Sistema Integral",
+        page_icon=icono_pag,
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
 
-st.markdown(
-    """
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="AgroÓptima">
-    <meta name="mobile-web-app-capable" content="yes">
-    <style>
-    .stApp { background-color: #0D2618; color: #ECFDF5; }
-    .stButton>button, .stDownloadButton>button {
-        width: 100%; border-radius: 8px; font-weight: bold; height: 2.9em;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        """
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="AgroÓptima">
+        <meta name="mobile-web-app-capable" content="yes">
+        <style>
+        .stApp { background-color: #0D2618; color: #ECFDF5; }
+        .stButton>button, .stDownloadButton>button {
+            width: 100%; border-radius: 8px; font-weight: bold; height: 2.9em;
+        }
+        button[data-baseweb="tab"] {
+            font-size: 15px !important;
+            font-weight: bold !important;
+            padding: 10px 14px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-for k_ses in ("carrito_desp", "carrito_nc", "carrito_nd", "ultimo_doc_id"):
-    if k_ses not in st.session_state:
-        st.session_state[k_ses] = [] if k_ses.startswith("carrito") else None
+    for k_ses in ("carrito_desp", "carrito_nc", "carrito_nd", "ultimo_doc_id"):
+        if k_ses not in st.session_state:
+            if k_ses.startswith("carrito"):
+                st.session_state[k_ses] = []
+            else:
+                st.session_state[k_ses] = None
 
-# VALIDACIÓN DE TU PIN PERSONALIZADO: a1b2c3
-if PIN_ACCESO_MOVIL:
-    if "autenticado" not in st.session_state:
-        st.session_state["autenticado"] = False
-    if not st.session_state["autenticado"]:
+    # Pantalla de bloqueo por PIN (a1b2c3)
+    if PIN_ACCESO_MOVIL:
+        if "autenticado" not in st.session_state:
+            st.session_state["autenticado"] = False
+        if not st.session_state["autenticado"]:
+            if RUTA_LOGO.exists():
+                st.image(str(RUTA_LOGO), width=200)
+            st.subheader("🔒 Sistema Integral | Agropecuaria Óptima C.A")
+            pin_in = st.text_input("Ingresa tu PIN de seguridad:", type="password")
+            if st.button("🔓 Desbloquear Sistema Integral"):
+                if pin_in.strip() == PIN_ACCESO_MOVIL:
+                    st.session_state["autenticado"] = True
+                    st.rerun()
+                else:
+                    st.error("PIN incorrecto. Verifica e intenta de nuevo.")
+            st.stop()
+
+    # Encabezado y Tasas BCV / Euro
+    tasas_act = obtener_tasas_db()
+    c_lg, c_ti = st.columns([1, 4])
+    with c_lg:
         if RUTA_LOGO.exists():
-            st.image(str(RUTA_LOGO), width=200)
-        st.subheader("🔒 Sistema Integral | Agropecuaria Óptima C.A")
-        pin_in = st.text_input("Ingresa tu PIN de seguridad:", type="password")
-        if st.button("🔓 Desbloquear Aplicación"):
-            if pin_in.strip() == PIN_ACCESO_MOVIL:
-                st.session_state["autenticado"] = True
+            st.image(str(RUTA_LOGO), width=130)
+    with c_ti:
+        st.markdown("### 🚜 SISTEMA INTEGRAL: PRECIOS, DESPACHOS E INVENTARIO")
+        st.caption("Agropecuaria Óptima C.A  •  7 Módulos Unificados en Vivo (iPhone • Android • Laptop)")
+
+    with st.expander("💱 Tasas BCV / Euro y Respaldo de Base de Datos (Toca aquí para abrir)", expanded=False):
+        cm, cu, ce = st.columns(3)
+        modo_moneda = cm.selectbox(
+            "Moneda para PDFs / Excels",
+            [
+                "REF Tasa BCV ($)", "REF Tasa Euro (€)",
+                "Bolívares (Tasa BCV $)", "Bolívares (Tasa Euro €)",
+                "Doble: REF ($) + Bs BCV", "Doble: REF (€) + Bs Euro",
+            ],
+        )
+        tasa_usd = cu.number_input("💵 Tasa BCV ($)", value=float(tasas_act["bcv_usd"]), step=0.5, format="%.2f")
+        tasa_eur = ce.number_input("💶 Tasa Euro (€)", value=float(tasas_act["bcv_eur"]), step=0.5, format="%.2f")
+
+        bf, bb = st.columns(2)
+        if bf.button("💾 Fijar Tasas Manuales"):
+            guardar_tasas_db(tasa_usd, tasa_eur, "Manual")
+            st.success("Tasas guardadas correctamente.")
+            st.rerun()
+        if bb.button("🔄 Sincronizar con BCV en Vivo"):
+            ok, uv, ev = sincronizar_tasas_bcv_web()
+            if ok:
+                st.success(f"BCV actualizado: $ {uv:.2f} | € {ev:.2f}")
                 st.rerun()
             else:
-                st.error("PIN incorrecto. Verifica e intenta de nuevo.")
-        st.stop()
+                st.warning("Sin respuesta del BCV; puedes fijarla manualmente.")
 
-
-# ------------------------------------------------------------------------------
-# ENCABEZADO SUPERIOR Y SINCRONIZACIÓN DE DATOS COMPARTIDOS
-# ------------------------------------------------------------------------------
-tasas_act = obtener_tasas_db()
-c_lg, c_ti = st.columns([1, 3])
-with c_lg:
-    if RUTA_LOGO.exists():
-        st.image(str(RUTA_LOGO), width=130)
-with c_ti:
-    st.markdown("### 🚜 Agropecuaria Óptima C.A")
-    st.caption("App Unificada en Vivo (iOS • Android • Laptop) — Datos Compartidos")
-
-with st.expander("💱 Tasas BCV / Euro y Sincronización de Base de Datos (Toca aquí)", expanded=False):
-    cm, cu, ce = st.columns(3)
-    modo_moneda = cm.selectbox(
-        "Moneda para PDFs / Excels",
-        [
-            "REF Tasa BCV ($)", "REF Tasa Euro (€)",
-            "Bolívares (Tasa BCV $)", "Bolívares (Tasa Euro €)",
-            "Doble: REF ($) + Bs BCV", "Doble: REF (€) + Bs Euro",
-        ],
-    )
-    tasa_usd = cu.number_input("💵 Tasa BCV ($)", value=float(tasas_act["bcv_usd"]), step=0.5, format="%.2f")
-    tasa_eur = ce.number_input("💶 Tasa Euro (€)", value=float(tasas_act["bcv_eur"]), step=0.5, format="%.2f")
-
-    bf, bb = st.columns(2)
-    if bf.button("💾 Fijar Tasas Manuales"):
-        guardar_tasas_db(tasa_usd, tasa_eur, "Manual")
-        st.success("Tasas guardadas para todos los dispositivos.")
-        st.rerun()
-    if bb.button("🔄 Sincronizar con BCV en Vivo"):
-        ok, uv, ev = sincronizar_tasas_bcv_web()
-        if ok:
-            st.success(f"BCV actualizado: $ {uv:.2f} | € {ev:.2f}")
+        st.markdown("---")
+        cs1, cs2 = st.columns(2)
+        if RUTA_DB.exists():
+            cs1.download_button(
+                "📥 Descargar Copia de Base de Datos (.DB)",
+                data=RUTA_DB.read_bytes(),
+                file_name="sistema_finca_optima.db",
+                mime="application/octet-stream",
+            )
+        db_subida = cs2.file_uploader("📤 Subir Base de Datos (.db) desde Laptop", type=["db"])
+        if db_subida is not None and st.button("✅ Aplicar Base de Datos Subida"):
+            RUTA_DB.write_bytes(db_subida.getvalue())
+            st.success("¡Base de datos actualizada en todos tus dispositivos!")
             st.rerun()
-        else:
-            st.warning("Sin respuesta del BCV; usa el botón de fijar manual.")
 
-    st.markdown("---")
-    st.markdown("**🔄 Respaldo y Sincronización Manual con Laptop (`sistema_finca_optima.db`):**")
-    cs1, cs2 = st.columns(2)
-    if RUTA_DB.exists():
-        cs1.download_button(
-            "📥 Descargar Base de Datos (.DB)",
-            data=RUTA_DB.read_bytes(),
-            file_name="sistema_finca_optima.db",
-            mime="application/octet-stream",
-        )
-    db_subida = cs2.file_uploader("📤 Subir Base de Datos (.db) desde Laptop", type=["db"])
-    if db_subida is not None and st.button("✅ Aplicar Base de Datos Subida"):
-        RUTA_DB.write_bytes(db_subida.getvalue())
-        st.success("¡Base de datos actualizada! Todos los dispositivos verán estos datos.")
-        st.rerun()
+    tasa_apl, simb_mon, nom_tasa = obtener_tasa_activa(modo_moneda, tasa_usd, tasa_eur)
+    st.info(f"📌 **Moneda Activa:** {modo_moneda}  |  **💵 BCV ($):** Bs {tasa_usd:,.2f}  |  **💶 Euro (€):** Bs {tasa_eur:,.2f}")
 
-tasa_apl, simb_mon, nom_tasa = obtener_tasa_activa(modo_moneda, tasa_usd, tasa_eur)
-st.info(f"📌 **Moneda:** {modo_moneda}  |  **💵 BCV:** Bs {tasa_usd:,.2f}  |  **💶 Euro:** Bs {tasa_eur:,.2f}")
+    prods_all = consultar_sql("SELECT * FROM productos ORDER BY nombre ASC")
+    mapa_prods = {p["nombre"]: p for p in prods_all}
+    centros_all = consultar_sql("SELECT * FROM centros_distribucion ORDER BY codigo ASC")
+    mapa_centros = {f"{d['codigo']} - {d['nombre']}": d for d in centros_all}
+    todas_sedes = [SEDE_PLANTA_PRINCIPAL] + list(mapa_centros.keys())
 
-modulo_activo = st.selectbox(
-    "📂 SELECCIONA EL MÓDULO:",
-    [
-        "📋 1. Listas de Precios (Checklist ☑)",
+    def renderizar_carrito(clave_sesion: str, escala_defecto: str = "Cliente Final") -> None:
+        st.markdown("#### 🛒 Carrito de Productos (Kilos x Precio Unitario)")
+        nombres_p = list(mapa_prods.keys())
+        if not nombres_p:
+            st.warning("No hay productos registrados en el catálogo.")
+            return
+        c1, c2 = st.columns(2)
+        prod_sel = c1.selectbox("Producto o Corte", nombres_p, key=f"p_{clave_sesion}")
+        lista_esc = list(ESCALAS_PRECIO.keys())
+        idx_e = lista_esc.index(escala_defecto) if escala_defecto in ESCALAS_PRECIO else 0
+        esc_sel = c2.selectbox("Escala Manual", lista_esc, index=idx_e, key=f"e_{clave_sesion}")
+
+        precio_sug = float(mapa_prods[prod_sel][ESCALAS_PRECIO[esc_sel]])
+        c3, c4 = st.columns(2)
+        kilos_in = c3.number_input("Cantidad en Kilos (KG)", min_value=0.0, value=10.0, step=1.0, format="%.2f", key=f"k_{clave_sesion}")
+        precio_in = c4.number_input(f"Precio Unit. ({simb_mon})", min_value=0.0, value=precio_sug, step=0.1, format="%.2f", key=f"u_{clave_sesion}")
+
+        b_add, b_rem, b_clr = st.columns(3)
+        if b_add.button("➕ Agregar Rubro", key=f"add_{clave_sesion}") and kilos_in > 0:
+            st.session_state[clave_sesion].append({
+                "producto": prod_sel,
+                "escala": esc_sel,
+                "kilos": round(kilos_in, 2),
+                "precio_unitario": round(precio_in, 2),
+                "subtotal_ref": round(kilos_in * precio_in, 2),
+            })
+            st.rerun()
+        if b_rem.button("🗑️ Quitar Último", key=f"rem_{clave_sesion}") and st.session_state[clave_sesion]:
+            st.session_state[clave_sesion].pop()
+            st.rerun()
+        if b_clr.button("🧹 Vaciar Lista", key=f"clr_{clave_sesion}"):
+            st.session_state[clave_sesion] = []
+            st.rerun()
+
+        lineas = st.session_state[clave_sesion]
+        if lineas:
+            st.dataframe(lineas, use_container_width=True)
+            t_kg = sum(float(x["kilos"]) for x in lineas)
+            t_rf = sum(float(x["subtotal_ref"]) for x in lineas)
+            st.success(f"**PESO TOTAL:** {t_kg:,.2f} KG  |  **TOTAL REF:** {simb_mon} {t_rf:,.2f}  |  **TOTAL Bs:** Bs {t_rf * tasa_apl:,.2f}")
+
+    def mostrar_descargas_doc(doc_id: int, prefijo_key: str) -> None:
+        pdf_b, nom_pdf = generar_bytes_documento(doc_id, en_excel=False)
+        xls_b, nom_xls = generar_bytes_documento(doc_id, en_excel=True)
+        d1, d2 = st.columns(2)
+        with d1:
+            st.download_button(f"📄 Descargar PDF ({nom_pdf})", data=pdf_b, file_name=nom_pdf, mime="application/pdf", key=f"dl_pdf_{prefijo_key}_{doc_id}")
+        with d2:
+            st.download_button(f"📊 Descargar Excel ({nom_xls})", data=xls_b, file_name=nom_xls, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f"dl_xls_{prefijo_key}_{doc_id}")
+
+    # ==========================================================================
+    # LAS 7 PESTAÑAS VISIBLES EN LA PARTE SUPERIOR (IGUAL QUE EN EL ESCRITORIO)
+    # ==========================================================================
+    (
+        tab_listas,
+        tab_despachos,
+        tab_credito,
+        tab_debito_mov,
+        tab_inventario,
+        tab_bases_datos,
+        tab_historial,
+    ) = st.tabs([
+        "📋 1. Listas de Precios",
         "📦 2. Órdenes de Despacho",
-        "💳 3. Notas de Crédito (CD)",
-        "🔄 4. Débitos y Movimientos (Rotación)",
+        "💳 3. Notas de Crédito",
+        "🔄 4. Débitos y Movimientos",
         "📊 5. Inventario por Sede",
         "👥 6. Clientes, Centros y Choferes",
-        "📜 7. Historial General de Documentos",
-    ],
-)
+        "📜 7. Historial General",
+    ])
 
-prods_all = consultar_sql("SELECT * FROM productos ORDER BY nombre ASC")
-mapa_prods = {p["nombre"]: p for p in prods_all}
-centros_all = consultar_sql("SELECT * FROM centros_distribucion ORDER BY codigo ASC")
-mapa_centros = {f"{d['codigo']} - {d['nombre']}": d for d in centros_all}
-todas_sedes = [SEDE_PLANTA_PRINCIPAL] + list(mapa_centros.keys())
+    # --------------------------------------------------------------------------
+    # MÓDULO 1: LISTAS DE PRECIOS Y CHECKLIST MANUAL (SIN 'NONE')
+    # --------------------------------------------------------------------------
+    with tab_listas:
+        st.subheader("📋 Generador de Listas de Precios y Checklist Manual")
+        c1, c2 = st.columns(2)
+        mod_lista = c1.selectbox("Precios Elegibles para el PDF / Excel", MODALIDADES_LISTA_PRECIOS)
+        rub_lista = c2.selectbox("Filtrar por Categoría", ["Todos los Rubros"] + RUBROS_CATALOGO)
+        solo_disp = st.checkbox("Incluir solo productos marcados como ☑ Disponibles", value=True)
 
+        bytes_lista_pdf = generar_bytes_lista_precios(False, mod_lista, rub_lista, modo_moneda, tasa_usd, tasa_eur, solo_disp)
+        bytes_lista_xls = generar_bytes_lista_precios(True, mod_lista, rub_lista, modo_moneda, tasa_usd, tasa_eur, solo_disp)
 
-def renderizar_carrito_movil(clave_sesion: str, escala_defecto: str = "Cliente Final") -> None:
-    st.markdown("#### 🛒 Agregar Productos (Kilos x Precio Unitario)")
-    nombres_p = list(mapa_prods.keys())
-    if not nombres_p:
-        return
-    c1, c2 = st.columns(2)
-    prod_sel = c1.selectbox("Producto o Corte", nombres_p, key=f"p_{clave_sesion}")
-    idx_e = list(ESCALAS_PRECIO.keys()).index(escala_defecto) if escala_defecto in ESCALAS_PRECIO else 0
-    esc_sel = c2.selectbox("Escala Manual", list(ESCALAS_PRECIO.keys()), index=idx_e, key=f"e_{clave_sesion}")
-
-    precio_sug = float(mapa_prods[prod_sel][ESCALAS_PRECIO[esc_sel]])
-    c3, c4 = st.columns(2)
-    kilos_in = c3.number_input("Kilos (KG)", min_value=0.0, value=10.0, step=1.0, format="%.2f", key=f"k_{clave_sesion}")
-    precio_in = c4.number_input(f"Precio Unit. ({simb_mon})", min_value=0.0, value=precio_sug, step=0.1, format="%.2f", key=f"u_{clave_sesion}")
-
-    b_add, b_rem, b_clr = st.columns(3)
-    if b_add.button("➕ Agregar", key=f"add_{clave_sesion}") and kilos_in > 0:
-        st.session_state[clave_sesion].append({
-            "producto": prod_sel, "escala": esc_sel, "kilos": round(kilos_in, 2),
-            "precio_unitario": round(precio_in, 2), "subtotal_ref": round(kilos_in * precio_in, 2),
-        })
-        st.rerun()
-    if b_rem.button("🗑️ Quitar Último", key=f"rem_{clave_sesion}") and st.session_state[clave_sesion]:
-        st.session_state[clave_sesion].pop()
-        st.rerun()
-    if b_clr.button("🧹 Vaciar", key=f"clr_{clave_sesion}"):
-        st.session_state[clave_sesion] = []
-        st.rerun()
-
-    lineas = st.session_state[clave_sesion]
-    if lineas:
-        st.dataframe(lineas, use_container_width=True)
-        t_kg = sum(float(x["kilos"]) for x in lineas)
-        t_rf = sum(float(x["subtotal_ref"]) for x in lineas)
-        st.success(f"**PESO TOTAL:** {t_kg:,.2f} KG  |  **TOTAL REF:** {simb_mon} {t_rf:,.2f}  |  **TOTAL Bs:** Bs {t_rf * tasa_apl:,.2f}")
-
-
-def mostrar_botones_descarga_doc(doc_id: int) -> None:
-    pdf_b, nom_pdf = generar_bytes_documento(doc_id, en_excel=False)
-    xls_b, nom_xls = generar_bytes_documento(doc_id, en_excel=True)
-    d1, d2 = st.columns(2)
-    d1.download_button(f"📄 Descargar PDF ({nom_pdf})", data=pdf_b, file_name=nom_pdf, mime="application/pdf")
-    d2.download_button(f"📊 Descargar Excel ({nom_xls})", data=xls_b, file_name=nom_xls, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
-# ==============================================================================
-# MÓDULO 1: LISTAS DE PRECIOS CON CHECKLIST MANUAL
-# ==============================================================================
-if modulo_activo.startswith("📋 1"):
-    st.subheader("📋 Generador de Listas de Precios y Checklist Manual")
-    c1, c2 = st.columns(2)
-    mod_lista = c1.selectbox("Precios Elegibles", MODALIDADES_LISTA_PRECIOS)
-    rub_lista = c2.selectbox("Filtrar por Categoría", ["Todos los Rubros"] + RUBROS_CATALOGO)
-    solo_disp = st.checkbox("Incluir solo productos marcados como ☑ Disponibles", value=True)
-
-    d1, d2 = st.columns(2)
-    d1.download_button(
-        "📄 Descargar Lista de Precios (PDF)",
-        data=generar_bytes_lista_precios(False, mod_lista, rub_lista, modo_moneda, tasa_usd, tasa_eur, solo_disp),
-        file_name=f"LISTA_PRECIOS_{datetime.now().strftime('%d%m%Y')}.pdf",
-        mime="application/pdf",
-    )
-    d2.download_button(
-        "📊 Descargar Lista de Precios (Excel)",
-        data=generar_bytes_lista_precios(True, mod_lista, rub_lista, modo_moneda, tasa_usd, tasa_eur, solo_disp),
-        file_name=f"LISTA_PRECIOS_{datetime.now().strftime('%d%m%Y')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-    st.divider()
-    st.markdown("#### ☑️ Checklist de Disponibilidad (Toca para marcar o quitar sin borrar)")
-    bm1, bm2 = st.columns(2)
-    if bm1.button("✅ Marcar Todos"):
-        ejecutar_sql("UPDATE productos SET disponible = 1")
-        st.rerun()
-    if bm2.button("⬜ Desmarcar Todos"):
-        ejecutar_sql("UPDATE productos SET disponible = 0")
-        st.rerun()
-
-    for p in consultar_sql("SELECT * FROM productos ORDER BY id ASC"):
-        est = bool(int(p["disponible"]) == 1)
-        lbl = f"{p['nombre']} ({p['rubro']}) — Mayor: ${p['precio_mayor']:.2f} | Vend: ${p['precio_vendedor']:.2f} | Cli: ${p['precio_cliente']:.2f}"
-        n_est = st.checkbox(lbl, value=est, key=f"chk_p_{p['id']}")
-        if n_est != est:
-            ejecutar_sql("UPDATE productos SET disponible = ? WHERE id = ?", (1 if n_est else 0, p["id"]))
-            st.rerun()
-
-    with st.expander("🥩 Agregar, Editar o Eliminar Producto del Catálogo"):
-        p_ed = st.selectbox("Seleccionar producto:", ["-- Nuevo --"] + list(mapa_prods.keys()))
-        po = mapa_prods.get(p_ed)
-        np = st.text_input("Nombre del Producto", value=po["nombre"] if po else "").strip().upper()
-        rp = st.selectbox("Categoría", RUBROS_CATALOGO, index=RUBROS_CATALOGO.index(po["rubro"]) if (po and po["rubro"] in RUBROS_CATALOGO) else 0)
-        cp1, cp2, cp3 = st.columns(3)
-        pm = cp1.number_input("Mayor ($)", value=float(po["precio_mayor"]) if po else 5.0, format="%.2f")
-        pv = cp2.number_input("Vendedor ($)", value=float(po["precio_vendedor"]) if po else 5.5, format="%.2f")
-        pc = cp3.number_input("Cliente ($)", value=float(po["precio_cliente"]) if po else 6.0, format="%.2f")
-        bg, be = st.columns(2)
-        if bg.button("💾 Guardar Producto") and np:
-            ejecutar_sql(
-                """INSERT INTO productos (nombre, rubro, precio_mayor, precio_vendedor, precio_cliente, disponible)
-                   VALUES (?, ?, ?, ?, ?, 1)
-                   ON CONFLICT(nombre) DO UPDATE SET rubro=excluded.rubro, precio_mayor=excluded.precio_mayor,
-                   precio_vendedor=excluded.precio_vendedor, precio_cliente=excluded.precio_cliente""",
-                (np, rp, round(pm, 2), round(pv, 2), round(pc, 2)),
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button(
+                "📄 Descargar Lista de Precios (PDF)",
+                data=bytes_lista_pdf,
+                file_name=f"LISTA_PRECIOS_{datetime.now().strftime('%d%m%Y')}.pdf",
+                mime="application/pdf",
             )
+        with dl2:
+            st.download_button(
+                "📊 Descargar Lista de Precios (Excel)",
+                data=bytes_lista_xls,
+                file_name=f"LISTA_PRECIOS_{datetime.now().strftime('%d%m%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        st.divider()
+        st.markdown("#### ☑️ Checklist de Productos Disponibles (Toca para marcar o quitar sin borrar)")
+
+        bm1, bm2 = st.columns(2)
+        if bm1.button("✅ Marcar Todos Disponibles"):
+            ejecutar_sql("UPDATE productos SET disponible = 1")
             st.rerun()
-        if po and be.button("🗑️ Eliminar Producto"):
-            ejecutar_sql("DELETE FROM productos WHERE id=?", (po["id"],))
-            st.rerun()
-
-
-# ==============================================================================
-# MÓDULO 2: ÓRDENES DE DESPACHO
-# ==============================================================================
-elif modulo_activo.startswith("📦 2"):
-    st.subheader("📦 Emitir Orden de Despacho")
-    clientes_db = consultar_sql("SELECT * FROM clientes ORDER BY nombre ASC")
-    mapa_cli = {f"{c['nombre']} ({c['documento_id']})": c for c in clientes_db}
-    cli_sel = st.selectbox("Cliente Registrado", list(mapa_cli.keys()))
-    cli_obj = mapa_cli[cli_sel]
-
-    with st.expander("⚡ Alta Rápida de Cliente"):
-        rn = st.text_input("Nombre o Razón Social").strip().upper()
-        rr = st.text_input("Cédula o RIF").strip().upper()
-        re = st.selectbox("Escala Preferida", list(ESCALAS_PRECIO.keys()))
-        if st.button("💾 Guardar Cliente") and rn:
-            ejecutar_sql("INSERT INTO clientes (nombre, documento_id, escala_preferida) VALUES (?, ?, ?)", (rn, rr or "S/D", re))
+        if bm2.button("⬜ Desmarcar Todos"):
+            ejecutar_sql("UPDATE productos SET disponible = 0")
             st.rerun()
 
-    sede_od = st.selectbox("Sede que Despacha", todas_sedes)
-    obs_od = st.text_input("Observaciones de Entrega")
-    desc_inv = st.checkbox("Descontar kilos del inventario de la sede", value=True)
-
-    st.divider()
-    renderizar_carrito_movil("carrito_desp", cli_obj["escala_preferida"])
-
-    if st.button("🚀 EMITIR ORDEN DE DESPACHO"):
-        if not st.session_state["carrito_desp"]:
-            st.warning("Agrega al menos un producto.")
+        if rub_lista == "Todos los Rubros":
+            productos_vista = consultar_sql("SELECT * FROM productos ORDER BY id ASC")
         else:
-            did = guardar_operacion_db(
-                "DESPACHO", "ORDEN DE DESPACHO", sede_od, cli_obj["nombre"], cli_obj["documento_id"],
-                "", f"Escala: {cli_obj['escala_preferida']}", "", "", "", 0,
-                1 if desc_inv else 0, obs_od, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_desp"]
+            productos_vista = consultar_sql("SELECT * FROM productos WHERE rubro=? ORDER BY id ASC", (rub_lista,))
+
+        for p in productos_vista:
+            est = bool(int(p["disponible"]) == 1)
+            p_cli_bs = float(p["precio_cliente"]) * tasa_apl
+            lbl = (
+                f"{p['nombre']} ({p['rubro']})  —  "
+                f"Mayor: {simb_mon}{p['precio_mayor']:.2f} | "
+                f"Vend 10%: {simb_mon}{p['precio_vendedor']:.2f} | "
+                f"Cliente: {simb_mon}{p['precio_cliente']:.2f} (Bs {p_cli_bs:,.2f})"
             )
-            st.session_state["carrito_desp"] = []
-            st.session_state["ultimo_doc_id"] = did
-            st.success("¡Orden de Despacho creada!")
+            n_est = st.checkbox(lbl, value=est, key=f"chk_p_{p['id']}")
+            if n_est != est:
+                nuevo_val = 1 if n_est else 0
+                ejecutar_sql("UPDATE productos SET disponible = ? WHERE id = ?", (nuevo_val, p["id"]))
+                st.rerun()
 
-    if st.session_state["ultimo_doc_id"]:
-        mostrar_botones_descarga_doc(st.session_state["ultimo_doc_id"])
+        st.divider()
+        col_ed, col_mas = st.columns(2)
+        with col_ed:
+            st.markdown("#### 🥩 Agregar, Editar o Eliminar Producto")
+            p_ed = st.selectbox("Seleccionar corte del catálogo:", ["-- Nuevo Producto --"] + list(mapa_prods.keys()))
+            po = mapa_prods.get(p_ed)
+            np = st.text_input("Nombre del Producto", value=po["nombre"] if po else "").strip().upper()
+            idx_r = RUBROS_CATALOGO.index(po["rubro"]) if (po and po["rubro"] in RUBROS_CATALOGO) else 0
+            rp = st.selectbox("Categoría / Rubro", RUBROS_CATALOGO, index=idx_r)
+            cp1, cp2, cp3 = st.columns(3)
+            pm = cp1.number_input("Mayor ($)", value=float(po["precio_mayor"]) if po else 5.0, format="%.2f")
+            pv = cp2.number_input("Vendedor ($)", value=float(po["precio_vendedor"]) if po else 5.5, format="%.2f")
+            pc = cp3.number_input("Cliente ($)", value=float(po["precio_cliente"]) if po else 6.0, format="%.2f")
+            bg, be = st.columns(2)
+            if bg.button("💾 Guardar / Actualizar Producto") and np:
+                ejecutar_sql(
+                    """INSERT INTO productos (nombre, rubro, precio_mayor, precio_vendedor, precio_cliente, disponible)
+                       VALUES (?, ?, ?, ?, ?, 1)
+                       ON CONFLICT(nombre) DO UPDATE SET rubro=excluded.rubro, precio_mayor=excluded.precio_mayor,
+                       precio_vendedor=excluded.precio_vendedor, precio_cliente=excluded.precio_cliente""",
+                    (np, rp, round(pm, 2), round(pv, 2), round(pc, 2)),
+                )
+                st.success(f"Producto '{np}' actualizado.")
+                st.rerun()
+            if po and be.button("🗑️ Eliminar Producto del Catálogo"):
+                ejecutar_sql("DELETE FROM productos WHERE id=?", (po["id"],))
+                st.rerun()
 
+        with col_mas:
+            st.markdown("#### ⚡ Ajuste Porcentual Masivo (%)")
+            porc_in = st.number_input("Porcentaje a subir o bajar (Ej. 5 o -5)", value=0.0, step=1.0, format="%.2f")
+            if st.button("📈 Aplicar Porcentaje a Todo el Catálogo") and porc_in != 0.0:
+                factor = 1.0 + (porc_in / 100.0)
+                ejecutar_sql(
+                    """UPDATE productos SET
+                       precio_mayor = ROUND(precio_mayor * ?, 2),
+                       precio_vendedor = ROUND(precio_vendedor * ?, 2),
+                       precio_cliente = ROUND(precio_cliente * ?, 2)""",
+                    (factor, factor, factor),
+                )
+                st.success(f"Se aplicó {porc_in:+.2f}% a todos los precios.")
+                st.rerun()
 
-# ==============================================================================
-# MÓDULO 3: NOTAS DE CRÉDITO (CD)
-# ==============================================================================
-elif modulo_activo.startswith("💳 3"):
-    st.subheader("💳 Nota de Crédito a Centro de Distribución")
-    cd_sel = st.selectbox("Centro Beneficiario", list(mapa_centros.keys()))
-    mot_nc = st.selectbox("Motivo", ["Ajuste de Precio / Descuento Comercial", "Merma de Peso en Recepción", "Diferencia en Guía", "Bonificación Operativa"])
-    ref_nc = st.text_input("Guía de Referencia")
-    obs_nc = st.text_input("Observaciones")
-    af_s = st.checkbox("Descontar monto del saldo del Centro", value=True)
+    # --------------------------------------------------------------------------
+    # MÓDULO 2: ÓRDENES DE DESPACHO
+    # --------------------------------------------------------------------------
+    with tab_despachos:
+        st.subheader("📦 Emitir Orden de Despacho a Cliente")
+        clientes_db = consultar_sql("SELECT * FROM clientes ORDER BY nombre ASC")
+        mapa_cli = {f"{c['nombre']} ({c['documento_id']})": c for c in clientes_db}
+        cli_sel = st.selectbox("Cliente Registrado", list(mapa_cli.keys()))
+        cli_obj = mapa_cli[cli_sel]
 
-    st.divider()
-    renderizar_carrito_movil("carrito_nc", "Al Mayor")
+        with st.expander("⚡ Registro Rápido de Cliente Nuevo"):
+            rn = st.text_input("Nombre o Razón Social del Cliente").strip().upper()
+            rr = st.text_input("Cédula o RIF del Cliente").strip().upper()
+            re = st.selectbox("Escala Preferida", list(ESCALAS_PRECIO.keys()))
+            if st.button("💾 Guardar Cliente Nuevo") and rn:
+                ejecutar_sql("INSERT INTO clientes (nombre, documento_id, escala_preferida) VALUES (?, ?, ?)", (rn, rr or "S/D", re))
+                st.success(f"Cliente '{rn}' guardado.")
+                st.rerun()
 
-    if st.button("🚀 EMITIR NOTA DE CRÉDITO"):
-        if not st.session_state["carrito_nc"]:
-            st.warning("Agrega al menos un producto.")
+        sede_od = st.selectbox("Sede que Despacha (Descuenta Stock)", todas_sedes)
+        obs_od = st.text_input("Observaciones de Entrega")
+        desc_inv = st.checkbox("Descontar kilogramos del inventario de la sede", value=True)
+
+        st.divider()
+        renderizar_carrito("carrito_desp", cli_obj["escala_preferida"])
+
+        if st.button("🚀 EMITIR ORDEN DE DESPACHO"):
+            if not st.session_state["carrito_desp"]:
+                st.warning("Agrega al menos un producto al carrito.")
+            else:
+                did = guardar_operacion_db(
+                    "DESPACHO", "ORDEN DE DESPACHO", sede_od, cli_obj["nombre"], cli_obj["documento_id"],
+                    "", f"Escala: {cli_obj['escala_preferida']}", "", "", "", 0,
+                    1 if desc_inv else 0, obs_od, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_desp"]
+                )
+                st.session_state["carrito_desp"] = []
+                st.session_state["ultimo_doc_id"] = did
+                st.success("¡Orden de Despacho emitida con éxito!")
+
+        if st.session_state["ultimo_doc_id"]:
+            mostrar_descargas_doc(st.session_state["ultimo_doc_id"], "desp")
+
+    # --------------------------------------------------------------------------
+    # MÓDULO 3: NOTAS DE CRÉDITO (CD)
+    # --------------------------------------------------------------------------
+    with tab_credito:
+        st.subheader("💳 Nota de Crédito a Centro de Distribución")
+        cd_sel = st.selectbox("Centro de Distribución Beneficiario", list(mapa_centros.keys()))
+        mot_nc = st.selectbox("Motivo de Acreditación", ["Ajuste de Precio / Descuento Comercial", "Merma de Peso en Recepción", "Diferencia en Guía", "Bonificación Operativa"])
+        ref_nc = st.text_input("Documento o Guía de Referencia")
+        obs_nc = st.text_input("Observaciones de la Nota de Crédito")
+        af_s = st.checkbox("Descontar monto del saldo del Centro", value=True)
+
+        st.divider()
+        renderizar_carrito("carrito_nc", "Al Mayor")
+
+        if st.button("🚀 GENERAR NOTA DE CRÉDITO"):
+            if not st.session_state["carrito_nc"]:
+                st.warning("Agrega al menos un producto a acreditar.")
+            else:
+                cd_obj = mapa_centros[cd_sel]
+                t_ref = round(sum(float(x["subtotal_ref"]) for x in st.session_state["carrito_nc"]), 2)
+                if af_s:
+                    ejecutar_sql("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref - ? WHERE id=?", (t_ref, cd_obj["id"]))
+                did = guardar_operacion_db(
+                    "NOTA_CREDITO", "NOTA DE CREDITO - CENTRO DE DISTRIBUCION", SEDE_PLANTA_PRINCIPAL,
+                    cd_sel, cd_obj["codigo"], ref_nc, mot_nc, "", "", "",
+                    1 if af_s else 0, 0, obs_nc, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_nc"]
+                )
+                st.session_state["carrito_nc"] = []
+                st.session_state["ultimo_doc_id"] = did
+                st.success("¡Nota de Crédito registrada correctamente!")
+
+        if st.session_state["ultimo_doc_id"]:
+            mostrar_descargas_doc(st.session_state["ultimo_doc_id"], "nc")
+
+    # --------------------------------------------------------------------------
+    # MÓDULO 4: DÉBITOS Y MOVIMIENTOS (ROTACIÓN Y TRANSPORTE)
+    # --------------------------------------------------------------------------
+    with tab_debito_mov:
+        st.subheader("🔄 Notas de Débito y Rotación de Inventario entre Sedes")
+        modo_op = st.selectbox("Modalidad de Operación", ["Movimiento entre Centros de Distribución", "Nota de Débito (Devolución NO Vendida)"])
+        c_or, c_de = st.columns(2)
+        orig_nd = c_or.selectbox("Sede Origen (Resta Stock -)", todas_sedes)
+        dest_nd = c_de.selectbox("Sede Destino (Suma Stock +)", todas_sedes, index=min(1, len(todas_sedes) - 1))
+        mot_nd = st.selectbox("Motivo del Registro", ["Rotación de Inventario Frío entre Sedes", "Abastecimiento desde Planta a Centro", "Retorno de Mercancía NO Vendida", "Cargo por Devolución"])
+
+        st.markdown("#### 🚛 Datos de Transporte en Guía (Preselección de Choferes)")
+        choferes_db = consultar_sql("SELECT * FROM choferes ORDER BY nombre ASC")
+        mapa_ch = {f"{ch['nombre']} | Placa: {ch['placa']}": ch for ch in choferes_db}
+        pre_ch = st.selectbox("Preseleccionar Chofer Registrado", [OPCION_CHOFER_MANUAL] + list(mapa_ch.keys()))
+        ch_obj = mapa_ch.get(pre_ch)
+
+        ct1, ct2, ct3 = st.columns(3)
+        nom_ch = ct1.text_input("Nombre del Chofer", value=ch_obj["nombre"] if ch_obj else "").strip().upper()
+        ced_ch = ct2.text_input("Cédula del Chofer", value=ch_obj["cedula"] if ch_obj else "").strip().upper()
+        pla_ch = ct3.text_input("Placa del Vehículo", value=ch_obj["placa"] if ch_obj else "").strip().upper()
+        obs_nd = st.text_input("Observaciones de Traslado / Cadena de Frío")
+        af_nd = st.checkbox("Afectar saldo contable del Centro (en Nota de Débito)", value=True)
+
+        st.divider()
+        renderizar_carrito("carrito_nd", "Al Mayor")
+
+        if st.button("🚀 EMITIR GUÍA Y ROTAR INVENTARIO"):
+            if not st.session_state["carrito_nd"]:
+                st.warning("Agrega productos a la lista para trasladar o devolver.")
+            elif normalizar_nombre_sede(orig_nd) == normalizar_nombre_sede(dest_nd):
+                st.error("La Sede Origen y la Sede Destino deben ser diferentes.")
+            else:
+                es_dev = "Devolución" in modo_op
+                t_ref = round(sum(float(x["subtotal_ref"]) for x in st.session_state["carrito_nd"]), 2)
+                af_s = 1 if (es_dev and af_nd) else 0
+                if af_s and orig_nd in mapa_centros:
+                    ejecutar_sql("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref + ? WHERE id=?", (t_ref, mapa_centros[orig_nd]["id"]))
+                did = guardar_operacion_db(
+                    "NOTA_DEBITO" if es_dev else "MOVIMIENTO",
+                    "NOTA DE DEBITO - DEVOLUCION MERCANCIA" if es_dev else "GUIA DE MOVIMIENTO ENTRE CENTROS",
+                    orig_nd, dest_nd, "", pla_ch, mot_nd, nom_ch, ced_ch, pla_ch,
+                    af_s, 1, obs_nd, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_nd"]
+                )
+                st.session_state["carrito_nd"] = []
+                st.session_state["ultimo_doc_id"] = did
+                st.success(f"¡Inventario rotado exitosamente de '{orig_nd}' a '{dest_nd}'!")
+
+        if st.session_state["ultimo_doc_id"]:
+            mostrar_descargas_doc(st.session_state["ultimo_doc_id"], "nd")
+
+    # --------------------------------------------------------------------------
+    # MÓDULO 5: INVENTARIO POR SEDE
+    # --------------------------------------------------------------------------
+    with tab_inventario:
+        st.subheader("📊 Control de Inventario en Vivo por Sede")
+        c_f1, c_f2 = st.columns(2)
+        sede_f_inv = c_f1.selectbox("Filtrar por Sede", ["Todas las Sedes"] + todas_sedes)
+        est_f_inv = c_f2.selectbox("Mostrar Productos", ["Con Movimiento o Stock Registrado", "Catálogo Completo (22 Productos)", "Solo Stock Positivo"])
+
+        with st.expander("⚖️ Carga Inicial / Ajuste Manual o Eliminación de Stock", expanded=False):
+            s_aj = st.selectbox("Sede o Centro de Distribución", todas_sedes)
+            p_aj = st.selectbox("Producto / Corte", list(mapa_prods.keys()))
+            t_aj = st.selectbox("Tipo de Operación", ["Sumar Entrada (+ KG)", "Restar Salida (- KG)", "Fijar Stock Exacto (= KG)"])
+            k_aj = st.number_input("Kilos (KG)", min_value=0.0, value=50.0, step=5.0, format="%.2f")
+
+            b1, b2, b3 = st.columns(3)
+            if b1.button("💾 Aplicar Stock"):
+                if "Fijar" in t_aj:
+                    fijar_stock_exacto_sede(s_aj, p_aj, k_aj)
+                elif "Restar" in t_aj:
+                    with conectar_db() as c:
+                        ajustar_stock_sede(c, s_aj, p_aj, -abs(k_aj))
+                        c.commit()
+                else:
+                    with conectar_db() as c:
+                        ajustar_stock_sede(c, s_aj, p_aj, +abs(k_aj))
+                        c.commit()
+                st.success("Stock actualizado.")
+                st.rerun()
+
+            if b2.button("🧹 Poner en 0 KG"):
+                fijar_stock_exacto_sede(s_aj, p_aj, 0.0)
+                st.rerun()
+
+            if b3.button("🗑️ Eliminar Fila"):
+                ejecutar_sql(
+                    "DELETE FROM inventario_sedes WHERE sede = ? AND producto = ?",
+                    (normalizar_nombre_sede(s_aj), p_aj.strip().upper()),
+                )
+                st.success("Registro eliminado del inventario.")
+                st.rerun()
+
+        if sede_f_inv == "Todas las Sedes":
+            regs_inv = consultar_sql("SELECT * FROM inventario_sedes ORDER BY sede, producto")
         else:
-            cd_obj = mapa_centros[cd_sel]
-            t_ref = round(sum(float(x["subtotal_ref"]) for x in st.session_state["carrito_nc"]), 2)
-            if af_s:
-                ejecutar_sql("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref - ? WHERE id=?", (t_ref, cd_obj["id"]))
-            did = guardar_operacion_db(
-                "NOTA_CREDITO", "NOTA DE CREDITO - CENTRO DE DISTRIBUCION", SEDE_PLANTA_PRINCIPAL,
-                cd_sel, cd_obj["codigo"], ref_nc, mot_nc, "", "", "",
-                1 if af_s else 0, 0, obs_nc, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_nc"]
-            )
-            st.session_state["carrito_nc"] = []
-            st.session_state["ultimo_doc_id"] = did
-            st.success("¡Nota de Crédito registrada!")
+            regs_inv = consultar_sql("SELECT * FROM inventario_sedes WHERE sede=? ORDER BY producto", (sede_f_inv,))
 
-    if st.session_state["ultimo_doc_id"]:
-        mostrar_botones_descarga_doc(st.session_state["ultimo_doc_id"])
-
-
-# ==============================================================================
-# MÓDULO 4: DÉBITOS Y MOVIMIENTOS (CON PRESELECTOR DE CHOFER Y ROTACIÓN)
-# ==============================================================================
-elif modulo_activo.startswith("🔄 4"):
-    st.subheader("🔄 Débitos y Rotación de Inventario entre Sedes")
-    modo_op = st.selectbox("Modalidad", ["Movimiento entre Centros de Distribución", "Nota de Débito (Devolución NO Vendida)"])
-    c_or, c_de = st.columns(2)
-    orig_nd = c_or.selectbox("Sede Origen (Resta Stock -)", todas_sedes)
-    dest_nd = c_de.selectbox("Sede Destino (Suma Stock +)", todas_sedes, index=min(1, len(todas_sedes) - 1))
-    mot_nd = st.selectbox("Motivo", ["Rotación de Inventario Frío entre Sedes", "Abastecimiento desde Planta a Centro", "Retorno de Mercancía NO Vendida", "Cargo por Devolución"])
-
-    st.markdown("#### 🚛 Datos de Transporte en Guía")
-    choferes_db = consultar_sql("SELECT * FROM choferes ORDER BY nombre ASC")
-    mapa_ch = {f"{ch['nombre']} | Placa: {ch['placa']}": ch for ch in choferes_db}
-    pre_ch = st.selectbox("Preseleccionar Chofer Registrado", [OPCION_CHOFER_MANUAL] + list(mapa_ch.keys()))
-    ch_obj = mapa_ch.get(pre_ch)
-
-    ct1, ct2, ct3 = st.columns(3)
-    nom_ch = ct1.text_input("Nombre Chofer", value=ch_obj["nombre"] if ch_obj else "").strip().upper()
-    ced_ch = ct2.text_input("Cédula Chofer", value=ch_obj["cedula"] if ch_obj else "").strip().upper()
-    pla_ch = ct3.text_input("Placa Vehículo", value=ch_obj["placa"] if ch_obj else "").strip().upper()
-    obs_nd = st.text_input("Observaciones de Traslado")
-    af_nd = st.checkbox("Afectar saldo contable del Centro (en Nota de Débito)", value=True)
-
-    st.divider()
-    renderizar_carrito_movil("carrito_nd", "Al Mayor")
-
-    if st.button("🚀 EMITIR GUÍA Y ROTAR INVENTARIO"):
-        if not st.session_state["carrito_nd"]:
-            st.warning("Agrega productos a la lista.")
-        elif normalizar_nombre_sede(orig_nd) == normalizar_nombre_sede(dest_nd):
-            st.error("Origen y Destino deben ser diferentes.")
+        filas_vista: List[Dict[str, object]] = []
+        if "Catálogo Completo" in est_f_inv:
+            sedes_obj = todas_sedes if sede_f_inv == "Todas las Sedes" else [sede_f_inv]
+            mapa_ex = {(r["sede"], r["producto"]): r for r in regs_inv}
+            for s_n in sedes_obj:
+                for p_n, p_row in mapa_prods.items():
+                    rg = mapa_ex.get((s_n, p_n))
+                    kg = float(rg["kilos_disponibles"]) if rg else 0.0
+                    act = rg["ultima_actualizacion"] if rg else "Sin movimientos"
+                    if kg <= 0:
+                        est_txt = "🔴 Sin Stock"
+                    elif kg < UMBRAL_STOCK_BAJO_KG:
+                        est_txt = "🟡 Bajo Stock"
+                    else:
+                        est_txt = "🟢 En Stock"
+                    vr = round(kg * float(p_row["precio_mayor"]), 2)
+                    filas_vista.append({"sede": s_n, "producto": p_n, "kilos": round(kg, 2), "estado": est_txt, "valor_ref": vr, "actualizado": act})
         else:
-            es_dev = "Devolución" in modo_op
-            t_ref = round(sum(float(x["subtotal_ref"]) for x in st.session_state["carrito_nd"]), 2)
-            af_s = 1 if (es_dev and af_nd) else 0
-            if af_s and orig_nd in mapa_centros:
-                ejecutar_sql("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref + ? WHERE id=?", (t_ref, mapa_centros[orig_nd]["id"]))
-            did = guardar_operacion_db(
-                "NOTA_DEBITO" if es_dev else "MOVIMIENTO",
-                "NOTA DE DEBITO - DEVOLUCION MERCANCIA" if es_dev else "GUIA DE MOVIMIENTO ENTRE CENTROS",
-                orig_nd, dest_nd, "", pla_ch, mot_nd, nom_ch, ced_ch, pla_ch,
-                af_s, 1, obs_nd, modo_moneda, tasa_usd, tasa_eur, st.session_state["carrito_nd"]
-            )
-            st.session_state["carrito_nd"] = []
-            st.session_state["ultimo_doc_id"] = did
-            st.success(f"¡Stock rotado de '{orig_nd}' a '{dest_nd}'!")
+            for r in regs_inv:
+                kg = round(float(r["kilos_disponibles"]), 2)
+                if "Positivo" in est_f_inv and kg <= 0:
+                    continue
+                p_row = mapa_prods.get(r["producto"])
+                pm = float(p_row["precio_mayor"]) if p_row else 0.0
+                if kg <= 0:
+                    est_txt = "🔴 Sin Stock"
+                elif kg < UMBRAL_STOCK_BAJO_KG:
+                    est_txt = "🟡 Bajo Stock"
+                else:
+                    est_txt = "🟢 En Stock"
+                filas_vista.append({"sede": r["sede"], "producto": r["producto"], "kilos": kg, "estado": est_txt, "valor_ref": round(kg * pm, 2), "actualizado": r["ultima_actualizacion"]})
 
-    if st.session_state["ultimo_doc_id"]:
-        mostrar_botones_descarga_doc(st.session_state["ultimo_doc_id"])
+        if filas_vista:
+            st.dataframe(filas_vista, use_container_width=True)
+            tk_inv = sum(float(x["kilos"]) for x in filas_vista)
+            tr_inv = sum(float(x["valor_ref"]) for x in filas_vista)
+            st.success(f"**STOCK TOTAL:** {tk_inv:,.2f} KG  |  **VALOR MAYOR:** {simb_mon} {tr_inv:,.2f}  |  **TOTAL Bs:** Bs {tr_inv * tasa_apl:,.2f}")
 
+            inv_pdf = generar_bytes_inventario(False, sede_f_inv, filas_vista, modo_moneda, tasa_usd, tasa_eur)
+            inv_xls = generar_bytes_inventario(True, sede_f_inv, filas_vista, modo_moneda, tasa_usd, tasa_eur)
+            di1, di2 = st.columns(2)
+            with di1:
+                st.download_button(
+                    "📄 Descargar Inventario (PDF)",
+                    data=inv_pdf,
+                    file_name=f"INVENTARIO_{datetime.now().strftime('%d%m%Y')}.pdf",
+                    mime="application/pdf",
+                )
+            with di2:
+                st.download_button(
+                    "📊 Descargar Inventario (Excel)",
+                    data=inv_xls,
+                    file_name=f"INVENTARIO_{datetime.now().strftime('%d%m%Y')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        else:
+            st.info("Aún no hay kilos cargados en esta vista. Abre el cuadro de 'Carga Inicial / Ajuste Manual' arriba o elige 'Catálogo Completo'.")
 
-# ==============================================================================
-# MÓDULO 5: INVENTARIO POR SEDE (COMPLETO CON AJUSTES, ELIMINAR Y PDF/EXCEL)
-# ==============================================================================
-elif modulo_activo.startswith("📊 5"):
-    st.subheader("📊 Control de Inventario por Sede")
-    c_f1, c_f2 = st.columns(2)
-    sede_f_inv = c_f1.selectbox("Filtrar por Sede", ["Todas las Sedes"] + todas_sedes)
-    est_f_inv = c_f2.selectbox("Mostrar", ["Con Movimiento o Stock Registrado", "Catálogo Completo (22 Productos)", "Solo Stock Positivo"])
+    # --------------------------------------------------------------------------
+    # MÓDULO 6: BASES DE DATOS (CLIENTES, CENTROS Y CHOFERES)
+    # --------------------------------------------------------------------------
+    with tab_bases_datos:
+        st.subheader("👥 Bases de Datos Maestras: Clientes, Centros y Choferes")
+        sub_cli, sub_cd, sub_ch = st.tabs(["👤 1. Clientes", "🏢 2. Centros de Distribución", "🚛 3. Choferes y Vehículos"])
 
-    with st.expander("⚖️ Carga Inicial / Ajuste Manual o Eliminación de Stock"):
-        s_aj = st.selectbox("Sede", todas_sedes)
-        p_aj = st.selectbox("Producto / Corte", list(mapa_prods.keys()))
-        t_aj = st.selectbox("Operación", ["Sumar Entrada (+ KG)", "Restar Salida (- KG)", "Fijar Stock Exacto (= KG)"])
-        k_aj = st.number_input("Kilos (KG)", min_value=0.0, value=50.0, step=5.0, format="%.2f")
+        with sub_cli:
+            clientes_l = consultar_sql("SELECT * FROM clientes ORDER BY nombre ASC")
+            mapa_c_ed = {f"{c['nombre']} ({c['documento_id']})": c for c in clientes_l}
+            sel_c = st.selectbox("Seleccionar Cliente para Editar o Borrar:", ["-- Nuevo Cliente --"] + list(mapa_c_ed.keys()))
+            co = mapa_c_ed.get(sel_c)
 
-        b1, b2, b3 = st.columns(3)
-        if b1.button("💾 Aplicar Stock"):
-            if "Fijar" in t_aj:
-                fijar_stock_exacto_sede(s_aj, p_aj, k_aj)
-            elif "Restar" in t_aj:
-                with conectar_db() as c:
-                    ajustar_stock_sede(c, s_aj, p_aj, -abs(k_aj))
-                    c.commit()
-            else:
-                with conectar_db() as c:
-                    ajustar_stock_sede(c, s_aj, p_aj, +abs(k_aj))
-                    c.commit()
-            st.success("Stock actualizado.")
-            st.rerun()
+            cn = st.text_input("Nombre o Razón Social", value=co["nombre"] if co else "", key="bd_cn").strip().upper()
+            cr = st.text_input("Cédula o RIF", value=co["documento_id"] if co else "", key="bd_cr").strip().upper()
+            lista_e = list(ESCALAS_PRECIO.keys())
+            idx_ce = lista_e.index(co["escala_preferida"]) if (co and co["escala_preferida"] in ESCALAS_PRECIO) else 0
+            ce = st.selectbox("Escala Preferida", lista_e, index=idx_ce, key="bd_ce")
+            ct = st.text_input("Teléfono", value=co["telefono"] if co else "", key="bd_ct")
+            cd_dir = st.text_input("Dirección", value=co["direccion"] if co else "", key="bd_cdir")
 
-        if b2.button("🧹 Poner en 0 KG"):
-            fijar_stock_exacto_sede(s_aj, p_aj, 0.0)
-            st.rerun()
+            bc1, bc2 = st.columns(2)
+            if bc1.button("💾 Guardar / Actualizar Cliente") and cn:
+                if co:
+                    ejecutar_sql("UPDATE clientes SET nombre=?, documento_id=?, escala_preferida=?, telefono=?, direccion=? WHERE id=?", (cn, cr or "S/D", ce, ct, cd_dir, co["id"]))
+                else:
+                    ejecutar_sql("INSERT INTO clientes (nombre, documento_id, escala_preferida, telefono, direccion) VALUES (?, ?, ?, ?, ?)", (cn, cr or "S/D", ce, ct, cd_dir))
+                st.rerun()
+            if co and bc2.button("🗑️ Eliminar Cliente"):
+                ejecutar_sql("DELETE FROM clientes WHERE id=?", (co["id"],))
+                st.rerun()
+            st.dataframe([dict(r) for r in clientes_l], use_container_width=True)
 
-        if b3.button("🗑️ Eliminar Fila"):
-            ejecutar_sql(
-                "DELETE FROM inventario_sedes WHERE sede = ? AND producto = ?",
-                (normalizar_nombre_sede(s_aj), p_aj.strip().upper()),
-            )
-            st.success("Registro eliminado del inventario.")
-            st.rerun()
+        with sub_cd:
+            sel_d = st.selectbox("Seleccionar Centro para Editar o Borrar:", ["-- Nuevo Centro --"] + list(mapa_centros.keys()))
+            do = mapa_centros.get(sel_d)
+            dcod = st.text_input("Código Sede (Ej. CD-03)", value=do["codigo"] if do else "").strip().upper()
+            dnom = st.text_input("Nombre del Centro", value=do["nombre"] if do else "").strip().upper()
+            denc = st.text_input("Encargado", value=do["encargado"] if do else "")
+            dtel = st.text_input("Teléfono Centro", value=do["telefono"] if do else "")
+            dubi = st.text_input("Ubicación", value=do["ubicacion"] if do else "")
 
-    if sede_f_inv == "Todas las Sedes":
-        regs_inv = consultar_sql("SELECT * FROM inventario_sedes ORDER BY sede, producto")
-    else:
-        regs_inv = consultar_sql("SELECT * FROM inventario_sedes WHERE sede=? ORDER BY producto", (sede_f_inv,))
+            bd1, bd2 = st.columns(2)
+            if bd1.button("💾 Guardar / Actualizar Centro") and dcod and dnom:
+                if do:
+                    ejecutar_sql("UPDATE centros_distribucion SET codigo=?, nombre=?, encargado=?, telefono=?, ubicacion=? WHERE id=?", (dcod, dnom, denc, dtel, dubi, do["id"]))
+                else:
+                    ejecutar_sql("INSERT OR IGNORE INTO centros_distribucion (codigo, nombre, encargado, telefono, ubicacion) VALUES (?, ?, ?, ?, ?)", (dcod, dnom, denc, dtel, dubi))
+                st.rerun()
+            if do and bd2.button("🗑️ Eliminar Centro"):
+                ejecutar_sql("DELETE FROM centros_distribucion WHERE id=?", (do["id"],))
+                st.rerun()
+            st.dataframe([dict(r) for r in centros_all], use_container_width=True)
 
-    filas_vista: List[Dict[str, object]] = []
-    if "Catálogo Completo" in est_f_inv:
-        sedes_obj = todas_sedes if sede_f_inv == "Todas las Sedes" else [sede_f_inv]
-        mapa_ex = {(r["sede"], r["producto"]): r for r in regs_inv}
-        for s_n in sedes_obj:
-            for p_n, p_row in mapa_prods.items():
-                rg = mapa_ex.get((s_n, p_n))
-                kg = float(rg["kilos_disponibles"]) if rg else 0.0
-                act = rg["ultima_actualizacion"] if rg else "Sin movimientos"
-                est_txt = "🔴 Sin Stock" if kg <= 0 else ("🟡 Bajo Stock" if kg < UMBRAL_STOCK_BAJO_KG else "🟢 En Stock")
-                vr = round(kg * float(p_row["precio_mayor"]), 2)
-                filas_vista.append({"sede": s_n, "producto": p_n, "kilos": round(kg, 2), "estado": est_txt, "valor_ref": vr, "actualizado": act})
-    else:
-        for r in regs_inv:
-            kg = round(float(r["kilos_disponibles"]), 2)
-            if "Positivo" in est_f_inv and kg <= 0:
-                continue
-            p_row = mapa_prods.get(r["producto"])
-            pm = float(p_row["precio_mayor"]) if p_row else 0.0
-            est_txt = "🔴 Sin Stock" if kg <= 0 else ("🟡 Bajo Stock" if kg < UMBRAL_STOCK_BAJO_KG else "🟢 En Stock")
-            filas_vista.append({"sede": r["sede"], "producto": r["producto"], "kilos": kg, "estado": est_txt, "valor_ref": round(kg * pm, 2), "actualizado": r["ultima_actualizacion"]})
+        with sub_ch:
+            ch_l = consultar_sql("SELECT * FROM choferes ORDER BY nombre ASC")
+            mapa_ch_ed = {f"{ch['nombre']} ({ch['placa']})": ch for ch in ch_l}
+            sel_h = st.selectbox("Seleccionar Chofer para Editar o Borrar:", ["-- Nuevo Chofer --"] + list(mapa_ch_ed.keys()))
+            ho = mapa_ch_ed.get(sel_h)
 
-    if filas_vista:
-        st.dataframe(filas_vista, use_container_width=True)
-        tk_inv = sum(float(x["kilos"]) for x in filas_vista)
-        tr_inv = sum(float(x["valor_ref"]) for x in filas_vista)
-        st.success(f"**STOCK TOTAL:** {tk_inv:,.2f} KG  |  **VALOR MAYOR:** {simb_mon} {tr_inv:,.2f}  |  **TOTAL Bs:** Bs {tr_inv * tasa_apl:,.2f}")
+            hnom = st.text_input("Nombre y Apellido del Chofer", value=ho["nombre"] if ho else "").strip().upper()
+            hced = st.text_input("Cédula del Chofer", value=ho["cedula"] if ho else "").strip().upper()
+            hpla = st.text_input("Placa del Vehículo", value=ho["placa"] if ho else "").strip().upper()
+            htel = st.text_input("Teléfono del Chofer", value=ho["telefono"] if ho else "")
+            hveh = st.text_input("Descripción del Camión / Vehículo", value=ho["vehiculo"] if ho else "")
 
-        di1, di2 = st.columns(2)
-        di1.download_button(
-            "📄 Descargar Inventario (PDF)",
-            data=generar_bytes_inventario(False, sede_f_inv, filas_vista, modo_moneda, tasa_usd, tasa_eur),
-            file_name=f"INVENTARIO_{datetime.now().strftime('%d%m%Y')}.pdf",
-            mime="application/pdf",
-        )
-        di2.download_button(
-            "📊 Descargar Inventario (Excel)",
-            data=generar_bytes_inventario(True, sede_f_inv, filas_vista, modo_moneda, tasa_usd, tasa_eur),
-            file_name=f"INVENTARIO_{datetime.now().strftime('%d%m%Y')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    else:
-        st.info("No hay registros de inventario en esta vista. Usa el panel superior para cargar kilos.")
+            bh1, bh2 = st.columns(2)
+            if bh1.button("💾 Guardar / Actualizar Chofer") and hnom and hced and hpla:
+                if ho:
+                    ejecutar_sql("UPDATE choferes SET nombre=?, cedula=?, placa=?, telefono=?, vehiculo=? WHERE id=?", (hnom, hced, hpla, htel, hveh, ho["id"]))
+                else:
+                    ejecutar_sql("INSERT INTO choferes (nombre, cedula, placa, telefono, vehiculo) VALUES (?, ?, ?, ?, ?)", (hnom, hced, hpla, htel, hveh))
+                st.rerun()
+            if ho and bh2.button("🗑️ Eliminar Chofer"):
+                ejecutar_sql("DELETE FROM choferes WHERE id=?", (ho["id"],))
+                st.rerun()
+            st.dataframe([dict(r) for r in ch_l], use_container_width=True)
 
+    # --------------------------------------------------------------------------
+    # MÓDULO 7: HISTORIAL GENERAL DE DOCUMENTOS
+    # --------------------------------------------------------------------------
+    with tab_historial:
+        st.subheader("📜 Historial General de Documentos")
+        f_hist = st.selectbox("Filtrar por Categoría", ["Todos", "DESPACHO", "NOTA_CREDITO", "NOTA_DEBITO", "MOVIMIENTO"])
+        if f_hist == "Todos":
+            docs_h = consultar_sql("SELECT * FROM documentos ORDER BY id DESC")
+        else:
+            docs_h = consultar_sql("SELECT * FROM documentos WHERE tipo_doc=? ORDER BY id DESC", (f_hist,))
 
-# ==============================================================================
-# MÓDULO 6: BASES DE DATOS (CLIENTES, CENTROS Y CHOFERES)
-# ==============================================================================
-elif modulo_activo.startswith("👥 6"):
-    st.subheader("👥 Bases de Datos Maestras: Clientes, Centros y Choferes")
-    tab_cli, tab_cd, tab_ch = st.tabs(["👤 1. Clientes", "🏢 2. Centros de Distribución", "🚛 3. Choferes y Vehículos"])
+        if not docs_h:
+            st.info("Todavía no hay documentos emitidos en esta categoría.")
+        else:
+            mapa_docs = {f"{d['correlativo']} | {d['entidad_destino']} | {d['total_kilos']:.2f} kg ({d['fecha']})": d for d in docs_h}
+            doc_sel_h = st.selectbox("Selecciona un Documento para Descargar PDF/Excel o Eliminar:", list(mapa_docs.keys()))
+            doc_row = mapa_docs[doc_sel_h]
 
-    with tab_cli:
-        clientes_l = consultar_sql("SELECT * FROM clientes ORDER BY nombre ASC")
-        mapa_c_ed = {f"{c['nombre']} ({c['documento_id']})": c for c in clientes_l}
-        sel_c = st.selectbox("Seleccionar Cliente para Editar o Borrar:", ["-- Nuevo Cliente --"] + list(mapa_c_ed.keys()))
-        co = mapa_c_ed.get(sel_c)
+            mostrar_descargas_doc(doc_row["id"], "hist")
 
-        cn = st.text_input("Nombre o Razón Social", value=co["nombre"] if co else "").strip().upper()
-        cr = st.text_input("Cédula o RIF", value=co["documento_id"] if co else "").strip().upper()
-        ce = st.selectbox("Escala Preferida", list(ESCALAS_PRECIO.keys()), index=list(ESCALAS_PRECIO.keys()).index(co["escala_preferida"]) if (co and co["escala_preferida"] in ESCALAS_PRECIO) else 0)
-        ct = st.text_input("Teléfono", value=co["telefono"] if co else "")
-        cd_dir = st.text_input("Dirección", value=co["direccion"] if co else "")
+            if st.button("🗑️ Eliminar este Documento (Revierte Stock y Saldo)"):
+                items_d = consultar_sql("SELECT * FROM documento_items WHERE documento_id=?", (doc_row["id"],))
+                with conectar_db() as conn:
+                    if doc_row["afecto_saldo"] == 1:
+                        if doc_row["tipo_doc"] == "NOTA_CREDITO" and doc_row["doc_identidad"]:
+                            conn.execute("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref + ? WHERE codigo=?", (doc_row["total_ref"], doc_row["doc_identidad"]))
+                        elif doc_row["tipo_doc"] == "NOTA_DEBITO":
+                            cod_or = doc_row["entidad_origen"].split(" - ")[0].strip()
+                            conn.execute("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref - ? WHERE codigo=?", (doc_row["total_ref"], cod_or))
+                    if doc_row["afecto_inventario"] == 1:
+                        for it in items_d:
+                            kg_i = float(it["kilos"])
+                            if doc_row["tipo_doc"] == "DESPACHO":
+                                ajustar_stock_sede(conn, doc_row["entidad_origen"], it["producto"], +kg_i)
+                            elif doc_row["tipo_doc"] in ("MOVIMIENTO", "NOTA_DEBITO"):
+                                ajustar_stock_sede(conn, doc_row["entidad_origen"], it["producto"], +kg_i)
+                                ajustar_stock_sede(conn, doc_row["entidad_destino"], it["producto"], -kg_i)
+                    conn.execute("DELETE FROM documentos WHERE id=?", (doc_row["id"],))
+                    conn.commit()
+                st.success(f"Documento '{doc_row['correlativo']}' eliminado y stock restaurado.")
+                st.rerun()
 
-        bc1, bc2 = st.columns(2)
-        if bc1.button("💾 Guardar / Actualizar Cliente") and cn:
-            if co:
-                ejecutar_sql("UPDATE clientes SET nombre=?, documento_id=?, escala_preferida=?, telefono=?, direccion=? WHERE id=?", (cn, cr or "S/D", ce, ct, cd_dir, co["id"]))
-            else:
-                ejecutar_sql("INSERT INTO clientes (nombre, documento_id, escala_preferida, telefono, direccion) VALUES (?, ?, ?, ?, ?)", (cn, cr or "S/D", ce, ct, cd_dir))
-            st.rerun()
-        if co and bc2.button("🗑️ Eliminar Cliente"):
-            ejecutar_sql("DELETE FROM clientes WHERE id=?", (co["id"],))
-            st.rerun()
-        st.dataframe([dict(r) for r in clientes_l], use_container_width=True)
-
-    with tab_cd:
-        sel_d = st.selectbox("Seleccionar Centro para Editar o Borrar:", ["-- Nuevo Centro --"] + list(mapa_centros.keys()))
-        do = mapa_centros.get(sel_d)
-        dcod = st.text_input("Código Sede (Ej. CD-03)", value=do["codigo"] if do else "").strip().upper()
-        dnom = st.text_input("Nombre del Centro", value=do["nombre"] if do else "").strip().upper()
-        denc = st.text_input("Encargado", value=do["encargado"] if do else "")
-        dtel = st.text_input("Teléfono Centro", value=do["telefono"] if do else "")
-        dubi = st.text_input("Ubicación", value=do["ubicacion"] if do else "")
-
-        bd1, bd2 = st.columns(2)
-        if bd1.button("💾 Guardar / Actualizar Centro") and dcod and dnom:
-            if do:
-                ejecutar_sql("UPDATE centros_distribucion SET codigo=?, nombre=?, encargado=?, telefono=?, ubicacion=? WHERE id=?", (dcod, dnom, denc, dtel, dubi, do["id"]))
-            else:
-                ejecutar_sql("INSERT OR IGNORE INTO centros_distribucion (codigo, nombre, encargado, telefono, ubicacion) VALUES (?, ?, ?, ?, ?)", (dcod, dnom, denc, dtel, dubi))
-            st.rerun()
-        if do and bd2.button("🗑️ Eliminar Centro"):
-            ejecutar_sql("DELETE FROM centros_distribucion WHERE id=?", (do["id"],))
-            st.rerun()
-        st.dataframe([dict(r) for r in centros_all], use_container_width=True)
-
-    with tab_ch:
-        ch_l = consultar_sql("SELECT * FROM choferes ORDER BY nombre ASC")
-        mapa_ch_ed = {f"{ch['nombre']} ({ch['placa']})": ch for ch in ch_l}
-        sel_h = st.selectbox("Seleccionar Chofer para Editar o Borrar:", ["-- Nuevo Chofer --"] + list(mapa_ch_ed.keys()))
-        ho = mapa_ch_ed.get(sel_h)
-
-        hnom = st.text_input("Nombre y Apellido del Chofer", value=ho["nombre"] if ho else "").strip().upper()
-        hced = st.text_input("Cédula del Chofer", value=ho["cedula"] if ho else "").strip().upper()
-        hpla = st.text_input("Placa del Vehículo", value=ho["placa"] if ho else "").strip().upper()
-        htel = st.text_input("Teléfono del Chofer", value=ho["telefono"] if ho else "")
-        hveh = st.text_input("Descripción del Camión / Vehículo", value=ho["vehiculo"] if ho else "")
-
-        bh1, bh2 = st.columns(2)
-        if bh1.button("💾 Guardar / Actualizar Chofer") and hnom and hced and hpla:
-            if ho:
-                ejecutar_sql("UPDATE choferes SET nombre=?, cedula=?, placa=?, telefono=?, vehiculo=? WHERE id=?", (hnom, hced, hpla, htel, hveh, ho["id"]))
-            else:
-                ejecutar_sql("INSERT INTO choferes (nombre, cedula, placa, telefono, vehiculo) VALUES (?, ?, ?, ?, ?)", (hnom, hced, hpla, htel, hveh))
-            st.rerun()
-        if ho and bh2.button("🗑️ Eliminar Chofer"):
-            ejecutar_sql("DELETE FROM choferes WHERE id=?", (ho["id"],))
-            st.rerun()
-        st.dataframe([dict(r) for r in ch_l], use_container_width=True)
+            st.dataframe([dict(d) for d in docs_h], use_container_width=True)
 
 
-# ==============================================================================
-# MÓDULO 7: HISTORIAL GENERAL DE DOCUMENTOS
-# ==============================================================================
-elif modulo_activo.startswith("📜 7"):
-    st.subheader("📜 Historial General de Documentos")
-    f_hist = st.selectbox("Filtrar por Categoría", ["Todos", "DESPACHO", "NOTA_CREDITO", "NOTA_DEBITO", "MOVIMIENTO"])
-    docs_h = consultar_sql("SELECT * FROM documentos ORDER BY id DESC") if f_hist == "Todos" else consultar_sql("SELECT * FROM documentos WHERE tipo_doc=? ORDER BY id DESC", (f_hist,))
-
-    if not docs_h:
-        st.info("Todavía no hay documentos registrados en esta categoría.")
-    else:
-        mapa_docs = {f"{d['correlativo']} | {d['entidad_destino']} | {d['total_kilos']:.2f} kg ({d['fecha']})": d for d in docs_h}
-        doc_sel_h = st.selectbox("Selecciona un Documento para Descargar PDF/Excel o Eliminar:", list(mapa_docs.keys()))
-        doc_row = mapa_docs[doc_sel_h]
-
-        mostrar_botones_descarga_doc(doc_row["id"])
-
-        if st.button("🗑️ Eliminar este Documento (Revierte Stock y Saldo)"):
-            items_d = consultar_sql("SELECT * FROM documento_items WHERE documento_id=?", (doc_row["id"],))
-            with conectar_db() as conn:
-                if doc_row["afecto_saldo"] == 1:
-                    if doc_row["tipo_doc"] == "NOTA_CREDITO" and doc_row["doc_identidad"]:
-                        conn.execute("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref + ? WHERE codigo=?", (doc_row["total_ref"], doc_row["doc_identidad"]))
-                    elif doc_row["tipo_doc"] == "NOTA_DEBITO":
-                        cod_or = doc_row["entidad_origen"].split(" - ")[0].strip()
-                        conn.execute("UPDATE centros_distribucion SET saldo_pendiente_ref = saldo_pendiente_ref - ? WHERE codigo=?", (doc_row["total_ref"], cod_or))
-                if doc_row["afecto_inventario"] == 1:
-                    for it in items_d:
-                        kg_i = float(it["kilos"])
-                        if doc_row["tipo_doc"] == "DESPACHO":
-                            ajustar_stock_sede(conn, doc_row["entidad_origen"], it["producto"], +kg_i)
-                        elif doc_row["tipo_doc"] in ("MOVIMIENTO", "NOTA_DEBITO"):
-                            ajustar_stock_sede(conn, doc_row["entidad_origen"], it["producto"], +kg_i)
-                            ajustar_stock_sede(conn, doc_row["entidad_destino"], it["producto"], -kg_i)
-                conn.execute("DELETE FROM documentos WHERE id=?", (doc_row["id"],))
-                conn.commit()
-            st.success(f"Documento '{doc_row['correlativo']}' eliminado y stock restaurado.")
-            st.rerun()
-
-        st.dataframe([dict(d) for d in docs_h], use_container_width=True)
+if __name__ == "__main__":
+    ejecutar_interfaz_principal()
